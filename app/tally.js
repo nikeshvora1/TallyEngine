@@ -12,7 +12,7 @@
 
   const DEFAULT_BASE = 'http://localhost:9000';
   const STORAGE_KEY  = 'te.tallyHost';
-  const TIMEOUT_MS   = 10000;
+  const TIMEOUT_MS   = 30000;
 
   let BASE = (() => {
     try { return localStorage.getItem(STORAGE_KEY) || DEFAULT_BASE; } catch(e) { return DEFAULT_BASE; }
@@ -169,22 +169,24 @@
    */
 
   async function fetchSalesVouchers(from, to) {
+    // No FILTER/SYSTEM block — TallyPrime hangs or resets the connection when
+    // custom TDL formulae are used in some configurations. Fetch all vouchers
+    // for the date range and filter by VoucherTypeName client-side.
     const doc = await tallyPost(collectionReq('TESalesVch', `
-      <COLLECTION NAME="TESalesVch" ISMODIFY="No" ISFIXED="No" ISINITIALIZE="No" ISOPTION="No" ISINTERNAL="No">
+      <COLLECTION NAME="TESalesVch" ISMODIFY="No">
         <TYPE>Vouchers</TYPE>
-        <BELONGSTO>Yes</BELONGSTO>
-        <FILTER>IsSalesVch</FILTER>
         <FETCH>Date,VoucherNumber,VoucherTypeName,PartyLedgerName,Narration,Amount,Reference,
                BILLALLOCATIONS.Name,BILLALLOCATIONS.Amount,BILLALLOCATIONS.DueDate,
                ALLLEDGERENTRIES.LedgerName,ALLLEDGERENTRIES.Amount,ALLLEDGERENTRIES.IsDeemedPositive,
                INVENTORYENTRIES.StockItemName,INVENTORYENTRIES.Rate,INVENTORYENTRIES.ActualQty,
                INVENTORYENTRIES.BilledQty,INVENTORYENTRIES.Amount,INVENTORYENTRIES.Discount,
                INVENTORYENTRIES.HSNCode</FETCH>
-      </COLLECTION>
-      <SYSTEM TYPE="Formulae" NAME="IsSalesVch">$$IsEqual:$VoucherTypeName:"Sales"</SYSTEM>`,
+      </COLLECTION>`,
       { SVFROMDATE: isoToTally(from), SVTODATE: isoToTally(to) }
     ));
-    return qsa(doc, 'VOUCHER').map(parseVoucher);
+    return qsa(doc, 'VOUCHER')
+      .filter(v => txt(v, 'VOUCHERTYPENAME') === 'Sales')
+      .map(parseVoucher);
   }
 
   function parseVoucher(v) {

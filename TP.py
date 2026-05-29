@@ -44,15 +44,14 @@ INVOICES_XML = f"""<ENVELOPE>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="TodaySales" ISMODIFY="No">
         <TYPE>Vouchers</TYPE>
-        <FILTER>IsSalesVch</FILTER>
-        <FETCH>Date,VoucherNumber,PartyLedgerName,Amount</FETCH>
+        <FETCH>Date,VoucherNumber,VoucherTypeName,PartyLedgerName,Amount</FETCH>
       </COLLECTION>
-      <SYSTEM TYPE="Formulae" NAME="IsSalesVch">
-        $$IsEqual:$VoucherTypeName:"Sales"
-      </SYSTEM>
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>"""
+# NOTE: no FILTER/SYSTEM block — TallyPrime hangs or resets the connection
+# when custom TDL formulae are used in some configurations. We fetch all
+# vouchers for the date range and filter by VoucherTypeName in Python.
 
 
 # ── transport layer ──────────────────────────────────────────────────────────
@@ -102,11 +101,11 @@ def via_raw_tcp(host, xml_body, timeout=15):
     return raw.decode("utf-8", errors="replace")
 
 
-def try_post(host, xml_body):
+def try_post(host, xml_body, timeout=15):
     """Try HTTP then raw TCP. Returns response text or None."""
     print(f"  [{host}] trying HTTP …")
     try:
-        r = via_http(host, xml_body)
+        r = via_http(host, xml_body, timeout=timeout)
         if r.strip():
             return r
         print("    → empty body")
@@ -115,7 +114,7 @@ def try_post(host, xml_body):
 
     print(f"  [{host}] trying raw TCP …")
     try:
-        r = via_raw_tcp(host, xml_body)
+        r = via_raw_tcp(host, xml_body, timeout=timeout)
         if r.strip():
             return r
         print("    → empty body")
@@ -163,7 +162,7 @@ def main():
 
     # ── Step 2: today's invoices ────────────────────────────────────────────
     print("Step 2 — fetching today's sales invoices")
-    result = try_post(connected_host, INVOICES_XML)
+    result = try_post(connected_host, INVOICES_XML, timeout=30)
     if not result:
         print("No data returned.")
         return
@@ -178,8 +177,13 @@ def main():
         print(result[:500])
         return
 
-    vouchers = root.findall(".//VOUCHER")
+    all_vouchers = root.findall(".//VOUCHER")
+    # Filter to Sales vouchers only (done client-side — see NOTE above)
+    vouchers = [v for v in all_vouchers
+                if (v.findtext("VOUCHERTYPENAME") or "").strip() == "Sales"]
     today_fmt = date.today().strftime("%d-%m-%Y")
+
+    print(f"  {len(all_vouchers)} total vouchers today, {len(vouchers)} are Sales.\n")
 
     if not vouchers:
         print(f"\n  No SALES vouchers found for today ({today_fmt}).")
