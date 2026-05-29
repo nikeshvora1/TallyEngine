@@ -65,11 +65,13 @@ if defined PYTHON_CMD (
         echo   [ OK ] HTTP server already running on port %HTTP_PORT%.
     ) else (
         echo   Starting local HTTP server on port %HTTP_PORT% ...
-        start /B %PYTHON_CMD% -m http.server %HTTP_PORT% --directory "%DIR%" --bind 127.0.0.1
-        timeout /t 1 /nobreak >nul
+        REM cd first so Python serves from the right folder (works on all Python 3 versions)
+        cd /d "%DIR%"
+        start /B %PYTHON_CMD% -m http.server %HTTP_PORT%
+        timeout /t 2 /nobreak >nul
     )
-    echo   Opening TallyEngine at http://127.0.0.1:%HTTP_PORT%/ ...
-    start "" "http://127.0.0.1:%HTTP_PORT%/TallyEngine.html"
+    echo   Opening TallyEngine at http://localhost:%HTTP_PORT%/ ...
+    start "" "http://localhost:%HTTP_PORT%/TallyEngine.html"
 ) else (
     echo   Python not found. Opening as file:// instead.
     echo   Install Python from https://python.org to enable live Tally data.
