@@ -60,24 +60,37 @@ if not defined PYTHON_CMD (
 )
 
 if defined PYTHON_CMD (
-    REM Kill any existing process on %HTTP_PORT% so we always start fresh
-    REM from the correct directory (stale processes cause 404 or wrong-folder issues).
+    REM Kill any existing process on %HTTP_PORT% for a clean start
     for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr ":%HTTP_PORT% " ^| findstr "LISTENING"') do (
         taskkill /F /PID %%P >nul 2>&1
     )
-    echo   Starting local HTTP server on port %HTTP_PORT% ...
+    echo   Starting HTTP server on port %HTTP_PORT% ...
     cd /d "%DIR%"
     start /B %PYTHON_CMD% -m http.server %HTTP_PORT%
-    timeout /t 2 /nobreak >nul
-    REM Use 127.0.0.1 explicitly — on Windows, "localhost" can resolve to ::1
-    REM (IPv6) while Python binds IPv4, causing a connection refused.
-    echo   Opening TallyEngine at http://127.0.0.1:%HTTP_PORT%/ ...
-    start "" "http://127.0.0.1:%HTTP_PORT%/TallyEngine.html"
+
+    REM Wait up to 8 seconds for the port to appear in netstat
+    set "TRIES=0"
+    :WAIT
+    timeout /t 1 /nobreak >nul
+    netstat -ano 2>nul | findstr ":%HTTP_PORT% " | findstr "LISTENING" >nul 2>&1
+    if %errorlevel%==0 goto READY
+    set /a TRIES=%TRIES%+1
+    if %TRIES% LSS 8 goto WAIT
+    echo   [ !! ] Server did not start. Check Python is working correctly.
+    goto OPEN
+    :READY
+    echo   [ OK ] HTTP server is listening on port %HTTP_PORT%.
+
+    :OPEN
+    set "TE_URL=http://127.0.0.1:%HTTP_PORT%/TallyEngine.html"
+    echo   Opening: %TE_URL%
+    REM Use PowerShell Start-Process — more reliable than "start" for URLs with ports
+    powershell -NoProfile -Command "Start-Process '%TE_URL%'"
 ) else (
     echo   Python not found. Opening as file:// instead.
     echo   Install Python from https://python.org to enable live Tally data.
     echo.
-    start "" "%DIR%TallyEngine.html"
+    powershell -NoProfile -Command "Start-Process '%DIR%TallyEngine.html'"
 )
 
 echo.
