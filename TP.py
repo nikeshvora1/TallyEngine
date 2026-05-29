@@ -175,14 +175,16 @@ def main():
     # IPv4 first — more reliable on Windows than ::1
     hosts = ["127.0.0.1", "::1"]
 
-    # ── Step 1: ping ────────────────────────────────────────────────────────
+    # ── Step 1: ping + extract company name ─────────────────────────────────
     print("Step 1 — ping TallyPrime gateway")
     connected_host = None
+    ping_result = None
     for host in hosts:
-        result = try_post(host, PING_XML)
-        if result:
+        r = try_post(host, PING_XML)
+        if r:
             connected_host = host
-            print(f"\n  ✓ Response received from {host}:{TALLY_PORT}\n")
+            ping_result = strip_http_headers(r)
+            print(f"\n  ✓ Response received from {host}:{TALLY_PORT}")
             break
 
     if not connected_host:
@@ -194,13 +196,43 @@ def main():
         print("  3. Restart TallyPrime after changing gateway settings.")
         return
 
+    # Extract company name — required so Tally knows which company to query
+    company_name = ""
+    try:
+        root = ET.fromstring(ping_result)
+        # TallyPrime returns company names in NAME or NAME.LIST/NAME
+        for tag in ("NAME", "BASICCOMPANYNAME"):
+            node = root.find(f".//{tag}")
+            if node is not None and node.text and node.text.strip():
+                company_name = node.text.strip()
+                break
+    except ET.ParseError:
+        pass
+
+    if company_name:
+        print(f"  Company : {company_name}")
+    else:
+        print("  Company : (could not parse — check TallyPrime has a company open)")
+        print(f"  Raw ping preview: {ping_result[:300]!r}")
+
+    print()
+
     # ── Step 2: today's invoices ────────────────────────────────────────────
     print("Step 2 — fetching today's sales invoices")
+
+    # Inject SVCURRENTCOMPANY so Tally uses the correct company context.
+    # Without this, voucher/ledger requests can hang indefinitely.
+    def with_company(xml):
+        if not company_name:
+            return xml
+        inject = f"<SVCURRENTCOMPANY>{company_name}</SVCURRENTCOMPANY>"
+        return xml.replace("</STATICVARIABLES>", f"  {inject}\n      </STATICVARIABLES>")
+
     result = None
     for label, xml in [
-        ("TDL collection",   INVOICES_TDL),
-        ("Day Book report",  INVOICES_DAYBOOK),
-        ("built-in collection", INVOICES_BUILTIN),
+        ("TDL collection",      with_company(INVOICES_TDL)),
+        ("Day Book report",     with_company(INVOICES_DAYBOOK)),
+        ("built-in collection", with_company(INVOICES_BUILTIN)),
     ]:
         print(f"\n  Trying {label} …")
         result = try_post(connected_host, xml, timeout=30)
@@ -210,7 +242,10 @@ def main():
 
     if not result:
         print("\nNo data returned from any format.")
-        print("Check: Help → Settings → Connectivity → Enable ODBC/HTTP Server.")
+        if not company_name:
+            print("  → No company name found. Open a company in TallyPrime and retry.")
+        else:
+            print("  → Check: Help → Settings → Connectivity → Enable ODBC/HTTP Server.")
         return
 
     result = strip_http_headers(result)

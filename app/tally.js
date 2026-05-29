@@ -14,9 +14,10 @@
   const STORAGE_KEY  = 'te.tallyHost';
   const TIMEOUT_MS   = 30000;
 
-  let BASE = (() => {
+  let BASE         = (() => {
     try { return localStorage.getItem(STORAGE_KEY) || DEFAULT_BASE; } catch(e) { return DEFAULT_BASE; }
   })();
+  let COMPANY_NAME = '';   // set after checkConnection; injected into all requests
 
   function setHost(input) {
     let h = input.trim();
@@ -85,9 +86,10 @@
   /* ── request builder ─────────────────────────────────────── */
 
   function collectionReq(id, tdlBody, vars) {
-    const varXml = vars
-      ? Object.entries(vars).map(([k, v]) => `<${k}>${v}</${k}>`).join('\n            ')
-      : '';
+    const allVars = { ...vars };
+    if (COMPANY_NAME) allVars.SVCURRENTCOMPANY = COMPANY_NAME;
+    const varXml = Object.entries(allVars)
+      .map(([k, v]) => `<${k}>${v}</${k}>`).join('\n            ');
     return `<ENVELOPE>
       <HEADER>
         <VERSION>1</VERSION>
@@ -125,10 +127,14 @@
         </ENVELOPE>`
       );
       if (qs(doc, 'parsererror')) return false;
-      // Any valid XML back from Tally = gateway is up
+      // Extract company name so all subsequent requests can pass SVCURRENTCOMPANY.
+      // Without it, voucher/ledger requests can hang indefinitely in some setups.
+      for (const tag of ['NAME', 'BASICCOMPANYNAME']) {
+        const n = qs(doc, tag);
+        if (n && n.textContent.trim()) { COMPANY_NAME = n.textContent.trim(); break; }
+      }
       return true;
     } catch (e) {
-      // TypeError with "Failed to fetch" or "NetworkError" is a CORS/network block
       if (e instanceof TypeError) return 'cors';
       return false;
     }
