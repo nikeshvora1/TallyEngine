@@ -60,18 +60,19 @@ if not defined PYTHON_CMD (
 )
 
 if defined PYTHON_CMD (
-    netstat -ano | findstr ":%HTTP_PORT%" | findstr "LISTENING" >nul 2>&1
-    if %errorlevel%==0 (
-        echo   [ OK ] HTTP server already running on port %HTTP_PORT%.
-    ) else (
-        echo   Starting local HTTP server on port %HTTP_PORT% ...
-        REM cd first so Python serves from the right folder (works on all Python 3 versions)
-        cd /d "%DIR%"
-        start /B %PYTHON_CMD% -m http.server %HTTP_PORT%
-        timeout /t 2 /nobreak >nul
+    REM Kill any existing process on %HTTP_PORT% so we always start fresh
+    REM from the correct directory (stale processes cause 404 or wrong-folder issues).
+    for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr ":%HTTP_PORT% " ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%P >nul 2>&1
     )
-    echo   Opening TallyEngine at http://localhost:%HTTP_PORT%/ ...
-    start "" "http://localhost:%HTTP_PORT%/TallyEngine.html"
+    echo   Starting local HTTP server on port %HTTP_PORT% ...
+    cd /d "%DIR%"
+    start /B %PYTHON_CMD% -m http.server %HTTP_PORT%
+    timeout /t 2 /nobreak >nul
+    REM Use 127.0.0.1 explicitly — on Windows, "localhost" can resolve to ::1
+    REM (IPv6) while Python binds IPv4, causing a connection refused.
+    echo   Opening TallyEngine at http://127.0.0.1:%HTTP_PORT%/ ...
+    start "" "http://127.0.0.1:%HTTP_PORT%/TallyEngine.html"
 ) else (
     echo   Python not found. Opening as file:// instead.
     echo   Install Python from https://python.org to enable live Tally data.
