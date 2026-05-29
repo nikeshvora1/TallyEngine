@@ -41,8 +41,8 @@ if %errorlevel%==0 (
     ) else (
         echo          TallyPrime not found at: %TALLY_EXE%
         echo          Edit TALLY_EXE in this .bat, or start Tally manually.
-        echo          (The UI still opens with demo data until a live
-        echo           gateway is reachable.)
+        echo          The UI still opens. If Tally is running on another
+        echo          machine, enter its IP in the connection dialog.
     )
 )
 
