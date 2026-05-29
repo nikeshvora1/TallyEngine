@@ -44,6 +44,7 @@ INVOICES_XML = f"""<ENVELOPE>
     <TDL><TDLMESSAGE>
       <COLLECTION NAME="TodaySales" ISMODIFY="No">
         <TYPE>Vouchers</TYPE>
+        <BELONGSTO>Yes</BELONGSTO>
         <FETCH>Date,VoucherNumber,VoucherTypeName,PartyLedgerName,Amount</FETCH>
       </COLLECTION>
     </TDLMESSAGE></TDL>

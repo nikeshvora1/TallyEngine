@@ -175,6 +175,7 @@
     const doc = await tallyPost(collectionReq('TESalesVch', `
       <COLLECTION NAME="TESalesVch" ISMODIFY="No">
         <TYPE>Vouchers</TYPE>
+        <BELONGSTO>Yes</BELONGSTO>
         <FETCH>Date,VoucherNumber,VoucherTypeName,PartyLedgerName,Narration,Amount,Reference,
                BILLALLOCATIONS.Name,BILLALLOCATIONS.Amount,BILLALLOCATIONS.DueDate,
                ALLLEDGERENTRIES.LedgerName,ALLLEDGERENTRIES.Amount,ALLLEDGERENTRIES.IsDeemedPositive,
