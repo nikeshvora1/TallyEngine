@@ -28,7 +28,11 @@ PING_XML = """<ENVELOPE>
   </STATICVARIABLES></DESC></BODY>
 </ENVELOPE>"""
 
-INVOICES_XML = f"""<ENVELOPE>
+# We try three XML formats in order — different TallyPrime versions/configs
+# respond to different ones. The first non-empty response wins.
+
+# Format A: custom TDL collection (needs TDL enabled in gateway settings)
+INVOICES_TDL = f"""<ENVELOPE>
   <HEADER>
     <VERSION>1</VERSION>
     <TALLYREQUEST>Export</TALLYREQUEST>
@@ -50,9 +54,38 @@ INVOICES_XML = f"""<ENVELOPE>
     </TDLMESSAGE></TDL>
   </DESC></BODY>
 </ENVELOPE>"""
-# NOTE: no FILTER/SYSTEM block — TallyPrime hangs or resets the connection
-# when custom TDL formulae are used in some configurations. We fetch all
-# vouchers for the date range and filter by VoucherTypeName in Python.
+
+# Format B: built-in Day Book report export — no TDL required
+INVOICES_DAYBOOK = f"""<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>Day Book</ID>
+  </HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES>
+      <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+      <SVFROMDATE>{TODAY}</SVFROMDATE>
+      <SVTODATE>{TODAY}</SVTODATE>
+    </STATICVARIABLES>
+  </DESC></BODY>
+</ENVELOPE>"""
+
+# Format C: built-in voucher collection — no TDL, no date filter (fallback)
+INVOICES_BUILTIN = """<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>List of Vouchers</ID>
+  </HEADER>
+  <BODY><DESC>
+    <STATICVARIABLES>
+      <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+    </STATICVARIABLES>
+  </DESC></BODY>
+</ENVELOPE>"""
 
 
 # ── transport layer ──────────────────────────────────────────────────────────
@@ -163,9 +196,21 @@ def main():
 
     # ── Step 2: today's invoices ────────────────────────────────────────────
     print("Step 2 — fetching today's sales invoices")
-    result = try_post(connected_host, INVOICES_XML, timeout=30)
+    result = None
+    for label, xml in [
+        ("TDL collection",   INVOICES_TDL),
+        ("Day Book report",  INVOICES_DAYBOOK),
+        ("built-in collection", INVOICES_BUILTIN),
+    ]:
+        print(f"\n  Trying {label} …")
+        result = try_post(connected_host, xml, timeout=30)
+        if result:
+            print(f"  ✓ Got a response via {label}")
+            break
+
     if not result:
-        print("No data returned.")
+        print("\nNo data returned from any format.")
+        print("Check: Help → Settings → Connectivity → Enable ODBC/HTTP Server.")
         return
 
     result = strip_http_headers(result)
